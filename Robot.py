@@ -1,5 +1,16 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+
 import numpy as np
 import time 
+
+WEBOTS_HOME = os.environ.get('WEBOTS_HOME', 'D:\Prgrams\Webots\Webots')
+sys.path.append(os.path.join(WEBOTS_HOME, 'lib', 'controller', 'python'))
+
+
+from controller import Robot
 
 class GeometricModel:
     
@@ -135,7 +146,7 @@ class KinematicModel:
     Kinematic model for a robot manipulator.
     This class uses the GeometricModel to compute transformations and kinematics.
     """
-    def __init__(self, geometric_model):
+    def __init__(self, geometric_model, tool = False):
         """
         Initializes the kinematic model with a geometric model.
         
@@ -145,6 +156,7 @@ class KinematicModel:
         self.gm = geometric_model
         self.J = np.zeros((6,self.gm.jointNumber))
         self.RJ = np.zeros((6,6))
+        self.tool = tool
         
     def updateJacobian(self, q):
         """
@@ -186,9 +198,9 @@ class KinematicModel:
                 # linear velocity contribution
                 self.J[3:,i] = bTi[0:3,2]
         
-        tool = True
         
-        if tool:
+        
+        if self.tool:
             # Calculate the tool Jacobian
             bTt = self.gm.getToolTransformWrtBase(q)
             b_ert = bTt[0:3, -1] - bTe[0:3, -1]
@@ -212,7 +224,7 @@ class KinematicModel:
             return self.J
 class CartesianControl:
     
-    def __init__(self, geometric_model ,angular_gain, linear_gain):
+    def __init__(self, geometric_model ,angular_gain, linear_gain,tool = False):
         
         """
         Cartesian control class for robot manipulators.
@@ -226,6 +238,7 @@ class CartesianControl:
         self.gm = geometric_model
         self.k_a = angular_gain
         self.k_l = linear_gain
+        self.tool = tool
     
     
     import numpy as np
@@ -329,30 +342,53 @@ class CartesianControl:
         - bVg: Desired end-effector velocity (6x1 vector)
         """
         
-        # Current end-effector pose
-        bTt = self.gm.getToolTransformWrtBase(q)
-        
-        # linear error in base frame
-        error_linear = bTg[0:3, 3] - bTt[0:3, 3]
-        
-        # Orientation error R_err in the tool frame
-        error_angular1 = bTt[0:3 , 0:3].T @ bTg[0:3, 0:3]
-        
-        # convert oientation error into angle-axis representation
-        theta , h = self.RottoAngleAxis(error_angular1)
-        
-        # map the vector to the base frame 
-        error_angular = bTt[0:3 , 0:3] @ (theta * h)
-        
-        
-        x_dot = np.vstack((
-            (self.k_a * error_angular).reshape(3, 1),
-            (self.k_l * error_linear).reshape(3, 1)
+        if self.tool:
+            # Current end-effector pose
+            bTt = self.gm.getToolTransformWrtBase(q)
             
-            ))
+            # linear error in base frame
+            error_linear = bTg[0:3, 3] - bTt[0:3, 3]
+            
+            # Orientation error R_err in the tool frame
+            error_angular1 = bTt[0:3 , 0:3].T @ bTg[0:3, 0:3]
+            
+            # convert oientation error into angle-axis representation
+            theta , h = self.RottoAngleAxis(error_angular1)
+            
+            # map the vector to the base frame 
+            error_angular = bTt[0:3 , 0:3] @ (theta * h)
+            
         
-        return x_dot
+            x_dot = np.vstack((
+                (self.k_a * error_angular).reshape(3, 1),
+                (self.k_l * error_linear).reshape(3, 1)
+                
+                ))
+            
+            return x_dot
+        else:
+            # Current end-effector pose
+            bTe = self.gm.GetTransformWrtBase(self.gm.UpdateDirectGeometry(q), self.gm.jointNumber)
+            
+            # linear error in base frame
+            error_linear = bTg[0:3, 3] - bTe[0:3, 3]
+            
+            # Orientation error R_err in the base frame
+            error_angular1 = bTg[0:3 , 0:3] @ bTe[0:3, 0:3].T 
+            
+            # convert oientation error into angle-axis representation
+            theta , h = self.RottoAngleAxis(error_angular1)
+            
+            error_angular = theta * h
+            
         
+            x_dot = np.vstack((
+                (self.k_a * error_angular).reshape(3, 1),
+                (self.k_l * error_linear).reshape(3, 1)
+                
+                ))
+            
+            return x_dot    
 def YPRToRot(psi, theta, phi):
     
     """
@@ -421,41 +457,198 @@ def KinematicSimulation(q, q_dot, dt, qmin, qmax):
             
     return q
 
+class RobotBase():
+    """
+    General robot controller base class for any manipulator in Webots.
+    """
+    def __init__(self, robot: Robot, sensor_names: list, motor_names: list, geometric_model: GeometricModel, setupby_vel=False):
+        """
+        Initializes the robot's interfaces.
+
+        Parameters:
+        - robot: Webots Robot instance
+        - sensor_names: list of joint sensor names
+        - motor_names: list of joint motor names
+        - geometric_model: instance of GeometricModel
+        """
+        self.robot = robot
+        self.timestep = int(robot.getBasicTimeStep())
+        self.sensor_names = sensor_names
+        self.motor_names = motor_names
+        self.geometric_model = geometric_model
+        
+        self.joint_sensors = []
+        self.joint_motors = []
+
+        self._setup_devices(setupby_vel)
+
+    def _setup_devices(self, setupby_vel):
+        """
+        Connects to joint sensors and motors.
+        """
+        for name in self.sensor_names:
+            sensor = self.robot.getDevice(name)
+            sensor.enable(self.timestep)
+            self.joint_sensors.append(sensor)
+
+        for name in self.motor_names:
+            motor = self.robot.getDevice(name)
+            # motor.setPosition(0.0)  # default to position control
+            self.joint_motors.append(motor)
+
+        if setupby_vel:
+            for motor in self.joint_motors:
+                motor.setPosition(float('inf'))
+                motor.setVelocity(0.0)
+
+    def read_joint_positions(self):
+        """
+        Reads joint sensor values.
+        """
+        return [sensor.getValue() for sensor in self.joint_sensors]
+
+    def actuate_joint_positions(self, q_desired):
+        """
+        Sends desired joint positions to motors.
+        """
+        for motor, q in zip(self.joint_motors, q_desired):
+            motor.setPosition(q)
+
+    def actuate_joint_velocities(self, v_desired):
+        """
+        Sends desired joint velocities to motors.
+        """
+        for motor, v in zip(self.joint_motors, v_desired):
+            motor.setVelocity(v)
+
+    def step(self):
+        """
+        Advances simulation by one timestep.
+        """
+        return self.robot.step(self.timestep)
+
+    def get_tool_pose(self):
+        """
+        Returns the current end-effector pose from joint sensors.
+        """
+        q = self.read_joint_positions()
+        return self.geometric_model.getToolTransformWrtBase(q)
+
+
+# --- Safe eval for pi expressions ---
+def parse_expr(expr):
+    return float(eval(expr, {"__builtins__": None}, {"pi": np.pi, "np": np}))   
+
+def Reachability(gm, km, cc, bTg, q, dt, samples, qmin, qmax):
+    """
+    Checks if the goal pose is reachable from the current configuration using iterative IK.
+    Returns True if reachable, raises RuntimeError if not.
+    """
+    for i in range(samples):
+        # Update the position of the goal frame
+        iTj = gm.UpdateDirectGeometry(q)
+        J = km.updateJacobian(q)
+        x_dot = cc.getCartesianreference(bTg, q)
+
+        # Inverse kinematic step
+        try:
+            q_dot = np.linalg.pinv(J) @ x_dot
+        except np.linalg.LinAlgError:
+            # Use damped least squares if singular
+            lambda_damping = 0.01
+            q_dot = J.T @ np.linalg.inv(J @ J.T + lambda_damping * np.eye(6)) @ x_dot
+
+        # Simulate joint update with limits
+        q = KinematicSimulation(q, q_dot, dt, qmin, qmax)
+
+        # Check convergence
+        pos_error = np.linalg.norm(x_dot[3:6])
+        ori_error = np.linalg.norm(x_dot[0:3])
+        if pos_error < 0.01 and ori_error < 0.05:
+            print("Reachable point found in", i, "iterations.")
+            return True
+
+    # If loop completes, goal is not reachable
+    print("Goal is NOT reachable: final position/orientation error too large after", samples, "iterations.")
+    raise RuntimeError("Goal is not reachable with current joint limits or kinematics.")
+        
+
+        
+        
 if __name__ == "__main__":
+    
+    robot = Robot()
+    
+    sensor_names = [
+        "shoulder_pan_joint_sensor", 
+        "shoulder_lift_joint_sensor",
+        "elbow_joint_sensor", 
+        "wrist_1_joint_sensor",
+        "wrist_2_joint_sensor", 
+        "wrist_3_joint_sensor"
+        
+    ]
+    
+    motor_names = [
+        "shoulder_pan_joint", 
+        "shoulder_lift_joint",
+        "elbow_joint", 
+        "wrist_1_joint",
+        "wrist_2_joint", 
+        "wrist_3_joint"
+        
+    ]
 
     
 
     # Initialize the geometric model for a UR5e robot
     # UR5e geometric model information
+    # This part can be changed for any other manipulator with any number of joints 
     iTj_0 = [
-        np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0.193],[0,0,0,1]]),
-        np.array([[0,0,-1,-0.1805],[0,1,0,0],[1,0,0,0],[0,0,0,1]]),
-        np.array([[0,1,0,0.615],[1,0,0,0],[0,0,-1,0],[0,0,0,1]]),
-        np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0.141],[0,0,0,1]]),
-        np.array([[0,1,0,0],[1,0,0,0.571],[0,0,-1,0],[0,0,0,1]]),
-        np.array([[0,0,1,0],[0,1,0,0],[-1,0,0,0.138],[0,0,0,1]]),
-        np.array([[0,0,-1,0],[0,1,0,0],[1,0,0,0.118],[0,0,0,1]])
+        np.array([[-1,0,0,0],[0,-1,0,0],[0,0,1,0],[0,0,0,1]]),
+        np.array([[0,-1,0,0],[0,0,-1,0],[1,0,0,0.1625],[0,0,0,1]]),
+        np.array([[0,1,0,0],[-1,0,0,0.425],[0,0,1,0],[0,0,0,1]]),
+        np.array([[0,-1,0,-0.3922],[1,0,0,0],[0,0,1,0],[0,0,0,1]]),
+        np.array([[0,0,-1,0],[-1,0,0,0],[0,1,0,0.1333],[0,0,0,1]]),
+        np.array([[1,0,0,0],[0,0,1,0],[0,-1,0,0.0997],[0,0,0,1]]),
+        
     ]
-    joint_type = [0, 0, 0, 1, 0, 0, 0]  # 0 for revolute, 1 for prismatic
+    
+    # The number of joints here should be euqal to the number of matrices in iTj_0
+    joint_type = [0, 0, 0, 0, 0, 0]  # 0 for revolute, 1 for prismatic
     
     # Tool transformation relative to the end-effector frame
     eTt = np.array([[1, 0, 0, 0],
                     [0, 1, 0, 0],
-                    [0, 0, 1, 0.1103],
+                    [0, 0, 1, 0.0996],
                     [0, 0, 0, 1]]) 
     
-    q0 = [0,0,0,0,0,0,0]
+    # initial joint configuration for testing
+    q0 = [0,0,0,0,0,0]
+    
+    
+    tool = True
+
+    geometric_model = GeometricModel(iTj_0, joint_type,eTt)
+    
+    
+    iTj = geometric_model.UpdateDirectGeometry(q0)
+    print("iTj for 0 is",  iTj)
+    
+    bTe = geometric_model.GetTransformWrtBase(iTj, geometric_model.jointNumber)
+    print("bTi for joint 6 is" , bTe)
+    
+    bTt = geometric_model.getToolTransformWrtBase(q0)
+    print("Tool wrt base at initial is: " , np.round(bTt, 3))
+    
+    kinematic_model = KinematicModel(geometric_model , tool)
+    bTt = geometric_model.getToolTransformWrtBase(q0)
+    print(np.round(bTt, 3))
     
     
 
-    geometric_model = GeometricModel(iTj_0, joint_type,eTt)
-    #print(geometric_model.iTj_0[1])
-    #print(geometric_model.getFrameWrtFrame(1,2))
-    iTj = geometric_model.UpdateDirectGeometry(q0)
-    print(iTj)
-    kinematic_model = KinematicModel(geometric_model)
-    bTt = geometric_model.getToolTransformWrtBase(q0)
-    print(np.round(bTt, 3))
+    robot_base = RobotBase(robot, sensor_names, motor_names, geometric_model, setupby_vel=True)
+
     
     
     """
@@ -464,12 +657,26 @@ if __name__ == "__main__":
     """ 
     # Goal definition 
     
-    bOg = np.array([[-0.05], [-1.2], [0.75]])  # desired x,y,z position of the end-effector
-    b_eta_g = YPRToRot(-np.pi/8, 0, 0) # desired orientation of the end-effector in roll-pitch-yaw n
-    print(bOg.shape)
-    print (b_eta_g)
+    # --- Get desired goal pose from user as a list ---
+    user_input = input("Enter desired x, y, z, roll, pitch, yaw without braces seperated by spaces (example: x y z yaw pitch roll) (use 'pi' if you want, e.g. pi/6): ")
+
+    # Split into tokens
+    values = [parse_expr(v) for v in user_input.strip().split()]
+    if len(values) != 6:
+        raise ValueError("You must enter exactly 6 values: x y z roll pitch yaw")
+
+    # Unpack
+    x, y, z, roll, pitch, yaw = values
     
-    # bVg = np.array([[-0.01] , [0] , [0]]) # desired end-effector linear velocity
+    bOg = np.array([[x], [y], [z]])
+    b_eta_g = YPRToRot(yaw, pitch, roll)  # desired orientation of the end-effector in roll-pitch-yaw 
+    # Example values:
+    # 0.4 0.2 0.8 0 0 pi/2 
+    
+    
+    # bOg = np.array([[0.4], [0.2], [0.8]])  # desired x,y,z position of the end-effector
+    # b_eta_g = YPRToRot(0, 0, np.pi/6) # desired orientation of the end-effector in roll-pitch-yaw n
+    
     
     bTg = np.vstack([
         
@@ -478,6 +685,8 @@ if __name__ == "__main__":
         
         ])
     
+   
+    
     print(bTg)
     
     # control proportional gain
@@ -485,19 +694,17 @@ if __name__ == "__main__":
     k_l = 0.4
     
     # Cartesian control initialization
-    cartesian_control = CartesianControl(geometric_model, k_a, k_l)
+    cartesian_control = CartesianControl(geometric_model, k_a, k_l , tool)
     
     
     
-    q = [0,-np.pi/6 , np.pi/3, 0, np.pi/2, np.pi/2,0]
+    q = [0,0 , 0, 0, 0, 0]
     
     x_dot = cartesian_control.getCartesianreference(bTg, q)
     
     iTj = geometric_model.UpdateDirectGeometry(q)
     
-    print(np.round(iTj, 3))
     
-    print(x_dot)
     
     
     """
@@ -505,61 +712,105 @@ if __name__ == "__main__":
     
     """
     
-    smaples  = 500 
+    samples  = 2000
     t_start = 0.0
     t_end = 20.0
-    dt = (t_end - t_start) / smaples
+    dt = (t_end - t_start) / samples
     t = np.arange(t_start, t_end + dt, dt)  # ensures t_end is included
     
     # Joint upper and Lower bounds 
-    qmin = -3.14 * np.ones((7,1))
-    qmax = 3.14 * np.ones((7,1))
-    qmin[3] = 0.0
-    qmax[3] = 1
+    qmin = -2*np.pi * np.ones((6,1)).flatten()
+    qmax = 2*np.pi * np.ones((6,1)).flatten()
+    
     
     # Pre allocation variables
-    bTi = np.zeros((7,4,4))
+    bTi = np.zeros((6,4,4))
     bri = np.zeros((8,3))
     
-    for i in range(smaples):
+    iteration = 0
+    # reachability_stat = Reachability(geometric_model , kinematic_model , cartesian_control , bTg , q, dt, samples, qmin, qmax)
+    if True:
         
-        # update the position of the goal frame 
-        iTj = geometric_model.UpdateDirectGeometry(q)
         
-        J = kinematic_model.updateJacobian(q)
-        
-        x_dot = cartesian_control.getCartesianreference(bTg, q)
-        
-        #### Inverse kinematic
-        
-        q_dot = np.linalg.pinv(J) @ x_dot
-        
-        q = KinematicSimulation(q , q_dot, dt , qmin, qmax)
-    
-        
-        if np.linalg.norm(x_dot[0:3]) < 0.01 and np.linalg.norm(x_dot[3:6]) < 0.01:
+        while robot_base.step() != -1 and iteration < samples:
             
-            print ("Reached requested goal in " , t_start + i*dt , " seconds")
-            break
+            # Read current joint positions
+            q_current = robot_base.read_joint_positions()
             
-    print("Final joint configuration: ", np.round(q,3))
-    print ("Final end-effector pose: " , J@q)
-    print ("Final end effector position: " , geometric_model.getToolTransformWrtBase(q)[0:3,3])
-    print ("Desired end effector position: " , bTg[0:3,3])
-    # iTj = geometric_model.UpdateDirectGeometry([0, -np.pi/6, np.pi/3, 0, np.pi/2, np.pi/2,0])
-    # #print(iTj[0])
+            # Compute desired end-effector velocity
+            x_dot = cartesian_control.getCartesianreference(bTg, q_current)
+            
+            # Update Jacobian
+            J = kinematic_model.updateJacobian(q_current)
+            
+            # Compute joint velocities using pseudoinverse
+            try:
+                q_dot = np.linalg.pinv(J) @ x_dot
+            except np.linalg.LinAlgError:
+                print("Singular configuration detected, using damped least squares")
+                lambda_damping = 0.01
+                q_dot = J.T @ np.linalg.inv(J @ J.T + lambda_damping * np.eye(6)) @ x_dot
+            
+            
+            
+
+            # Send velocities to robot
+            robot_base.actuate_joint_velocities(q_dot.flatten())
+            
+            
+            # Check convergence
+            pos_error = np.linalg.norm(x_dot[3:6])
+            ori_error = np.linalg.norm(x_dot[0:3])
+            
+            if iteration % 50 == 0:  # Print every 50 iterations
+                current_pose = geometric_model.getToolTransformWrtBase(q_current)
+                current_pos = current_pose[0:3, 3]
+                print(f"Iteration {iteration}: pos_error={pos_error:.4f}, ori_error={ori_error:.4f}")
+                print(f"Current position: {np.round(current_pos, 3)}")
+            
+            # Check if goal is reached
+            if pos_error < 0.01 and ori_error < 0.05:
+                print(f"Goal reached in {iteration} iterations!")
+                final_pose = geometric_model.getToolTransformWrtBase(q_current)
+                print(f"Final position: {np.round(final_pose[0:3, 3], 3)}")
+                print(f"Desired position: {bOg.flatten()}")
+                break
+                
+            iteration += 1
     
-    # bTt = geometric_model.getToolTransformWrtBase([0, -np.pi/6, np.pi/3, 0, np.pi/2, np.pi/2,0])
-    # print(np.round(bTt, 3))
+        # Stop the robot
+        robot_base.actuate_joint_velocities([0.0] * 6)
+        
+        if iteration >= samples:
+            print("Maximum iterations reached without convergence")
+        
+        print("Control loop finished")
+   
     
-    # kinematic_model = KinematicModel(geometric_model)
-    # J_total = kinematic_model.updateJacobian([0, -np.pi/6, np.pi/3, 0, np.pi/2, np.pi/2,0])
-    
-    # print(np.round(J_total, 3))
-    # print(np.round(kinematic_model.RJ, 3))
-    # bTi = geometric_model.GetTransformWrtBase(iTj, 1)
-    # print(np.round(bTi, 3))
-    
+    # for i in range(samples):
+        
+    #     # update the position of the goal frame 
+    #     iTj = geometric_model.UpdateDirectGeometry(q)
+        
+    #     J = kinematic_model.updateJacobian(q)
+        
+    #     x_dot = cartesian_control.getCartesianreference(bTg, q)
+        
+    #     #### Inverse kinematic
+        
+    #     q_dot = np.linalg.pinv(J) @ x_dot
+        
+    #     q = KinematicSimulation(q , q_dot, dt , qmin, qmax)
     
         
+    #     if np.linalg.norm(x_dot[0:3]) < 0.01 and np.linalg.norm(x_dot[3:6]) < 0.01:
+            
+    #         print ("Reached requested goal in " , t_start + i*dt , " seconds")
+    #         break
+            
+    # print("Final joint configuration: ", np.round(q,3))
+    # print ("Final end-effector pose: " , J@q)
+    # print ("Final end effector position: " , geometric_model.getToolTransformWrtBase(q)[0:3,3])
+    # print ("Desired end effector position: " , bTg[0:3,3])
+    
     
