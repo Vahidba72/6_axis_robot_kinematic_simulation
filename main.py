@@ -41,6 +41,8 @@ def main():
     # Initialize robot base
     robot_base = RobotBase(robot, SENSOR_NAMES, MOTOR_NAMES, geometric_model, setupby_vel=True)
     
+    
+    
     # asl for the input type 
     mode = input("choose input mode (1 for joint angles, 2 for cartesian pose): ")
     
@@ -169,4 +171,5 @@ if __name__ == "__main__":
 # q1 q2 q3 q4 q5 q6
 # 0 -pi/2 0 -pi/2 0 0
 # 0 -pi/2 0 0 0 0
-# pi/3 -pi/2 pi/4 0 pi/5/6 0
+# pi/3 -pi/2 pi/4 0 pi/5 0
+# pi/3 -pi/2 pi/4 0 pi/5 pi/3

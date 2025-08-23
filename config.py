@@ -30,6 +30,7 @@ MOTOR_NAMES = [
     "wrist_1_joint",
     "wrist_2_joint", 
     "wrist_3_joint"
+    
 ]
 
 # UR5e geometric model information
@@ -75,3 +76,7 @@ MAX_VEL = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
 # Convergence thresholds
 POS_THRESHOLD = 0.01
 ORI_THRESHOLD = 0.05
+
+
+    
+    
