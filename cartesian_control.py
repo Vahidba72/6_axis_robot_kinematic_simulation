@@ -23,7 +23,7 @@ class CartesianControl:
     
     def ComputeAngleAxis(self , theta , h):
         """
-        Computes the rotation matrix from angle-axis representation.
+        Computes the rotation matrix from angle-axis representation using rodriguez formula.
         
         Inputs:
         - theta: Rotation angle
@@ -40,6 +40,8 @@ class CartesianControl:
             [-h[1], h[0], 0]
         ])
         
+        
+        # Rodriguez formula
         R = np.eye(3) + np.sin(theta) * V_operator + (1 - np.cos(theta)) * (V_operator @ V_operator)
         
         return R
@@ -79,7 +81,7 @@ class CartesianControl:
         # compute eigenvalues and eigenvectors
         eigVals , eigVecs = np.linalg.eig(R)
         
-        # Find the eigenvector corresponding to eigenvector1 
+        # Find the eigenvector corresponding to eigenvector = 1 
         idx = np.where(np.abs(eigVals - 1) < Thres)[0]
         if idx.size == 0:
             raise ValueError("No valid eigenvector found for rotation axis.")
@@ -121,7 +123,7 @@ class CartesianControl:
         """
         
         if self.tool:
-            # Current end-effector pose
+            # Current tool pose
             bTt = self.gm.getToolTransformWrtBase(q)
             
             # linear error in base frame
@@ -133,10 +135,10 @@ class CartesianControl:
             # convert oientation error into angle-axis representation
             theta , h = self.RottoAngleAxis(error_angular1)
             
-            # map the vector to the base frame 
+            # map the axis vector to the base frame 
             error_angular = bTt[0:3 , 0:3] @ (theta * h)
             
-        
+            # The desired velocity in the base frame
             x_dot = np.vstack((
                 (self.k_a * error_angular).reshape(3, 1),
                 (self.k_l * error_linear).reshape(3, 1)

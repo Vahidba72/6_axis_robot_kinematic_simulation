@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 import numpy as np
 
+    
+        # Configuration parameters for the UR5e robot and control settings.
+        
+        # Using this configuration code, you can change the whole settings of the robot to model another manipulator.
+        # You can increase or decrease the number of joints, change the joint types, the geometric model, the control gains etc.
+        
+        
+        # Just be sure that the number of joints is consistent with the geometric model and the joint types
+        
+        # Important Note: If the number of joints is changed, the robot model in Webots must be changed accordingly.
+
+    
 # UR5e Robot Configuration
 SENSOR_NAMES = [
     "shoulder_pan_joint_sensor", 
@@ -21,6 +33,7 @@ MOTOR_NAMES = [
 ]
 
 # UR5e geometric model information
+# these are the transformation matrices from joint i-1 to joint i at the zero configuration
 iTj_0 = [
     np.array([[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]),
     np.array([[0, -1, 0, 0], [0, 0, -1, 0], [1, 0, 0, 0.1625], [0, 0, 0, 1]]),

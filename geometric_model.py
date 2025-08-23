@@ -4,7 +4,7 @@ class GeometricModel:
     
     
     """
-    The geometric model for multi arm robotd with different types of join (Rotational or Prismatic)
+    The geometric model for multi arm robotd with different types of joint (Rotational or Prismatic)
     
     """
     
@@ -32,6 +32,9 @@ class GeometricModel:
         
         Inputs:
         - q: list or array of joint values
+        
+        Outputs:
+        - iTj: updated transformation matrices from joint i to joint i+1 (4x4xN array)
 
         """
         iTj = np.array([np.eye(4)] * self.iTj_0.shape[0])
@@ -97,34 +100,4 @@ class GeometricModel:
         return bTe @ self.eTt
         
 
-    # def getFrameWrtFrame(self, linkNumber_i, linkNumber_j):
-    #     """
-    #     Computes the transformation matrix between two joints i and j.
-        
-    #     Inputs:
-    #     - linkNumber_i: Number of the starting link
-    #     - linkNumber_j: Number of the target link
-        
-    #     Outputs:
-    #     - iTojTransform: Transformation matrix from link i to link j
-    #     """
-        
-    #     iTojTransform = np.eye(4)
-
-    #     if linkNumber_i < linkNumber_j:
-            
-    #         for i in range (linkNumber_i, linkNumber_j):
-    #             iTojTransform = iTojTransform @ self.iTj_0[i]
-                
-                
-    #     elif linkNumber_i > linkNumber_j:
-            
-    #         for i in range(linkNumber_j, linkNumber_i):
-    #             iTojTransform = np.linalg.inv(self.iTj_0[i]) @ iTojTransform
     
-    #     else:
-            
-    #         # Transformation from a joint to itself
-    #         iTojTransform = np.eye(4)
-            
-    #     return iTojTransform

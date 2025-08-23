@@ -41,7 +41,7 @@ def YPRToRot(psi, theta, phi):
 
 def KinematicSimulation(q, q_dot, dt, qmin, qmax, max_vel):
     """
-    Simulates the kinematic update of joint positions.
+    Simulates the kinematic update of joint positions, Considering joint limits and velocity limits.
     
     Inputs:
     - q: Current joint positions (list or array)
