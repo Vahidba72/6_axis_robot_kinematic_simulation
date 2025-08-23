@@ -539,38 +539,7 @@ class RobotBase():
 def parse_expr(expr):
     return float(eval(expr, {"__builtins__": None}, {"pi": np.pi, "np": np}))   
 
-def Reachability(gm, km, cc, bTg, q, dt, samples, qmin, qmax):
-    """
-    Checks if the goal pose is reachable from the current configuration using iterative IK.
-    Returns True if reachable, raises RuntimeError if not.
-    """
-    for i in range(samples):
-        # Update the position of the goal frame
-        iTj = gm.UpdateDirectGeometry(q)
-        J = km.updateJacobian(q)
-        x_dot = cc.getCartesianreference(bTg, q)
 
-        # Inverse kinematic step
-        try:
-            q_dot = np.linalg.pinv(J) @ x_dot
-        except np.linalg.LinAlgError:
-            # Use damped least squares if singular
-            lambda_damping = 0.01
-            q_dot = J.T @ np.linalg.inv(J @ J.T + lambda_damping * np.eye(6)) @ x_dot
-
-        # Simulate joint update with limits
-        q = KinematicSimulation(q, q_dot, dt, qmin, qmax)
-
-        # Check convergence
-        pos_error = np.linalg.norm(x_dot[3:6])
-        ori_error = np.linalg.norm(x_dot[0:3])
-        if pos_error < 0.01 and ori_error < 0.05:
-            print("Reachable point found in", i, "iterations.")
-            return True
-
-    # If loop completes, goal is not reachable
-    print("Goal is NOT reachable: final position/orientation error too large after", samples, "iterations.")
-    raise RuntimeError("Goal is not reachable with current joint limits or kinematics.")
         
 
         
@@ -729,62 +698,83 @@ if __name__ == "__main__":
     
     iteration = 0
     # reachability_stat = Reachability(geometric_model , kinematic_model , cartesian_control , bTg , q, dt, samples, qmin, qmax)
-    if True:
-        
-        
-        while robot_base.step() != -1 and iteration < samples:
-            
-            # Read current joint positions
-            q_current = robot_base.read_joint_positions()
-            
-            # Compute desired end-effector velocity
-            x_dot = cartesian_control.getCartesianreference(bTg, q_current)
-            
-            # Update Jacobian
-            J = kinematic_model.updateJacobian(q_current)
-            
-            # Compute joint velocities using pseudoinverse
-            try:
-                q_dot = np.linalg.pinv(J) @ x_dot
-            except np.linalg.LinAlgError:
-                print("Singular configuration detected, using damped least squares")
-                lambda_damping = 0.01
-                q_dot = J.T @ np.linalg.inv(J @ J.T + lambda_damping * np.eye(6)) @ x_dot
-            
-            
-            
-
-            # Send velocities to robot
-            robot_base.actuate_joint_velocities(q_dot.flatten())
-            
-            
-            # Check convergence
-            pos_error = np.linalg.norm(x_dot[3:6])
-            ori_error = np.linalg.norm(x_dot[0:3])
-            
-            if iteration % 50 == 0:  # Print every 50 iterations
-                current_pose = geometric_model.getToolTransformWrtBase(q_current)
-                current_pos = current_pose[0:3, 3]
-                print(f"Iteration {iteration}: pos_error={pos_error:.4f}, ori_error={ori_error:.4f}")
-                print(f"Current position: {np.round(current_pos, 3)}")
-            
-            # Check if goal is reached
-            if pos_error < 0.01 and ori_error < 0.05:
-                print(f"Goal reached in {iteration} iterations!")
-                final_pose = geometric_model.getToolTransformWrtBase(q_current)
-                print(f"Final position: {np.round(final_pose[0:3, 3], 3)}")
-                print(f"Desired position: {bOg.flatten()}")
-                break
-                
-            iteration += 1
     
-        # Stop the robot
-        robot_base.actuate_joint_velocities([0.0] * 6)
         
-        if iteration >= samples:
-            print("Maximum iterations reached without convergence")
         
-        print("Control loop finished")
+    while robot_base.step() != -1 and iteration < samples:
+        
+        # Read current joint positions
+        q_current = robot_base.read_joint_positions()
+        
+        # Compute desired end-effector velocity
+        x_dot = cartesian_control.getCartesianreference(bTg, q_current)
+        
+        # Update Jacobian
+        J = kinematic_model.updateJacobian(q_current)
+        
+        # Compute joint velocities using pseudoinverse
+        try:
+            q_dot = np.linalg.pinv(J) @ x_dot
+        except np.linalg.LinAlgError:
+            print("Singular configuration detected, using damped least squares")
+            lambda_damping = 0.01
+            q_dot = J.T @ np.linalg.inv(J @ J.T + lambda_damping * np.eye(6)) @ x_dot
+        
+        
+         # --- Enforce joint limits and velocity limits ---
+        max_vel = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])  # adjust as needed
+
+        q_next = np.array(q_current) + dt * q_dot.flatten()
+        for i in range(len(q_next)):
+            # Clamp velocity if joint is at/over limit
+            if (q_current[i] <= qmin[i] and q_dot[i] < 0) or (q_current[i] >= qmax[i] and q_dot[i] > 0):
+                q_dot[i] = 0.0
+            # Clamp velocity to max allowed
+            if abs(q_dot[i]) > max_vel[i]:
+                q_dot[i] = np.sign(q_dot[i]) * max_vel[i]
+            # Prevent overshooting the limit in one step
+            if q_next[i] < qmin[i]:
+                q_dot[i] = (qmin[i] - q_current[i]) / dt
+            elif q_next[i] > qmax[i]:
+                q_dot[i] = (qmax[i] - q_current[i]) / dt
+
+
+        # Send velocities to robot
+        robot_base.actuate_joint_velocities(q_dot.flatten())
+        
+        
+        # Check convergence
+        pos_error = np.linalg.norm(x_dot[3:6])
+        ori_error = np.linalg.norm(x_dot[0:3])
+        
+        if iteration % 50 == 0:  # Print every 50 iterations
+            current_pose = geometric_model.getToolTransformWrtBase(q_current)
+            current_pos = current_pose[0:3, 3]
+            print(f"Iteration {iteration}: pos_error={pos_error:.4f}, ori_error={ori_error:.4f}")
+            print(f"Current position: {np.round(current_pos, 3)}")
+        
+        # Check if goal is reached
+        if pos_error < 0.01 and ori_error < 0.05:
+            print(f"Goal reached in {iteration} iterations!")
+            final_pose = geometric_model.getToolTransformWrtBase(q_current)
+            print(f"Final position: {np.round(final_pose[0:3, 3], 3)}")
+            print(f"Desired position: {bOg.flatten()}")
+            break
+            
+        iteration += 1
+
+    # Stop the robot
+    robot_base.actuate_joint_velocities([0.0] * 6)
+    
+    if iteration >= samples:
+        print("Maximum iterations reached without convergence")
+        final_pose = geometric_model.getToolTransformWrtBase(q_current)
+        final_pos_error = np.linalg.norm(bOg.flatten() - final_pose[0:3, 3].flatten())
+        final_ori_error = np.linalg.norm(b_eta_g - final_pose[0:3, 0:3])
+        print(f"Final position error: {final_pos_error:.4f}, orientation error: {final_ori_error:.4f}")
+        raise RuntimeError("Goal is not reachable: final error too large. Motion is impossible with current joint limits or kinematics.")
+    
+    print("Control loop finished")
    
     
     # for i in range(samples):
@@ -812,5 +802,4 @@ if __name__ == "__main__":
     # print ("Final end-effector pose: " , J@q)
     # print ("Final end effector position: " , geometric_model.getToolTransformWrtBase(q)[0:3,3])
     # print ("Desired end effector position: " , bTg[0:3,3])
-    
-    
+
