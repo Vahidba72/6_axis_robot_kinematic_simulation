@@ -430,7 +430,7 @@ def YPRToRot(psi, theta, phi):
     R = R_z @ R_y @ R_x  
     return R   
 
-def KinematicSimulation(q, q_dot, dt, qmin, qmax):
+def KinematicSimulation(q, q_dot, dt, qmin, qmax, max_vel):
     """
     Simulates the kinematic update of joint positions.
     
@@ -445,17 +445,28 @@ def KinematicSimulation(q, q_dot, dt, qmin, qmax):
     - q_new: Updated joint positions after applying velocities and limits
     """
     
+    # --- Enforce joint limits and velocity limits ---
+    max_vel = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])  # adjust as needed
+
+    q_next = np.array(q) + dt * q_dot.flatten()
+    for i in range(len(q_next)):
+        # Clamp velocity if joint is at/over limit
+        if (q[i] <= qmin[i] and q_dot[i] < 0) or (q[i] >= qmax[i] and q_dot[i] > 0):
+            q_dot[i] = 0.0
+        # Clamp velocity to max allowed
+        if abs(q_dot[i]) > max_vel[i]:
+            q_dot[i] = np.sign(q_dot[i]) * max_vel[i]
+        # Prevent overshooting the limit in one step
+        if q_next[i] < qmin[i]:
+            q_dot[i] = (qmin[i] - q_current[i]) / dt
+        elif q_next[i] > qmax[i]:
+            q_dot[i] = (qmax[i] - q_current[i]) / dt
     
     q = q + dt * q_dot.flatten()
     
-    # saturate the joint positions 
-    for i in range(len(q)):
-        if q[i] < qmin[i]:
-            q[i] = qmin[i]
-        elif q[i] > qmax[i]:
-            q[i] = qmax[i]
+    
             
-    return q
+    return q_dot
 
 class RobotBase():
     """
@@ -723,21 +734,10 @@ if __name__ == "__main__":
         
          # --- Enforce joint limits and velocity limits ---
         max_vel = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])  # adjust as needed
+        
+        q_dot = KinematicSimulation(q, q_dot, dt, qmin, qmax, max_vel)
 
-        q_next = np.array(q_current) + dt * q_dot.flatten()
-        for i in range(len(q_next)):
-            # Clamp velocity if joint is at/over limit
-            if (q_current[i] <= qmin[i] and q_dot[i] < 0) or (q_current[i] >= qmax[i] and q_dot[i] > 0):
-                q_dot[i] = 0.0
-            # Clamp velocity to max allowed
-            if abs(q_dot[i]) > max_vel[i]:
-                q_dot[i] = np.sign(q_dot[i]) * max_vel[i]
-            # Prevent overshooting the limit in one step
-            if q_next[i] < qmin[i]:
-                q_dot[i] = (qmin[i] - q_current[i]) / dt
-            elif q_next[i] > qmax[i]:
-                q_dot[i] = (qmax[i] - q_current[i]) / dt
-
+        
 
         # Send velocities to robot
         robot_base.actuate_joint_velocities(q_dot.flatten())
