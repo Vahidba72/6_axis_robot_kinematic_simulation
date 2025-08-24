@@ -105,6 +105,7 @@ UR5e_FK_IK/
 </ul>
 
 <h2 id="-examples">📌 Examples</h2>
+Keep in mind that after the input is given to the robot, you should wait until it reaches the goal or gives an error regardin the reachability of the robot. You can not change the goal in the middle of the movement in this version of the code. After the goal was reached and the program stops, you do not need to pause the webot simulation. You can run the python code again and insert new inputs and send the robot to new locations from the last position.
 <pre><code># Example joint input mode
 # 0 -pi/2 0 -pi/2 0 0
 # 0 -pi/2 0 0 0 0
@@ -117,7 +118,13 @@ python main.py
 # 0.3 0.4 0.3 0 pi/2 pi/3
 python main.py
 </code></pre>
-Keep in mind that after the input is given to the robot, you should wait until it reaches the goal or gives an error regardin the reachability of the robot. You can not change the goal in the middle of the movement in this version of the code. After the goal was reached and the program stops, you do not need to pause the webot simulation. You can run the python code again and insert new inputs and send the robot to new locations from the last position.
+
+
+<h2 id="-pick and place">🔎 Pick and Place</h2>
+<p>
+For the pick and place task, it is assumed that the robot is moving towards the already known locations (pick and place locations) using the inverse kinematics algorithm. the robot in this task should also have a gripper to grab the object and drop it in the final location. At this stage the whole simulation for this part is not done yet and is still ongoing. However, in such tasks, an important part of the algorithm is the motion and task planning of the robot. Thus, a careful planning is required. A planning domain is defined over here for the robot to reach each object, grab the object, bring it to the new location and drop the object at the target location. 
+</p>
+
 
 <h2 id="-notes">📝 Notes</h2>
 <ul>
