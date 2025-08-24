@@ -194,6 +194,7 @@ bridging <b>symbolic task planning</b> with <b>robot motion execution</b>.
   <li>Supports up to 6-DoF manipulator; UR5e specific DH parameters included in config.</li>
   <li>Tool frame usage can be enabled/disabled via <code>USE_TOOL</code> in config.</li>
   <li>Joint limits, max velocity, and convergence thresholds can be tuned in <code>config.py</code>.</li>
+  <li>Other capabilities of the code which will be added in the future are Obstacle avoidance and the complete execution of the pick and place simulation in webots. </li>
 </ul>
 
 
