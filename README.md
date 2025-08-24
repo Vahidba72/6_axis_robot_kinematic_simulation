@@ -25,6 +25,9 @@ This repository provides a <strong>forward and inverse kinematics simulation env
   <li>Cartesian-space (desired end-effector pose)</li>
 </ul>
 The project includes tools for <strong>FK, IK, Jacobian computation, and Cartesian velocity control</strong>, with support for tool offsets and joint limits. The code is written in a complete and modularized way so that it can be used in more general cases for other types of industrial arms. Only some parameters inside the code need to be modified. For the visualization of the code and better ability to check the results, a UR5e robot is simulated inside webots.
+
+
+https://github.com/user-attachments/assets/2d71010a-a044-41ad-a201-042e7d33207d
 </p>
 
 <h2 id="-features">✨ Features</h2>
