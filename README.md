@@ -163,11 +163,22 @@ The problem file specifies a concrete task instance:
 <p>
 The domain and problem together allow a planner to generate a <b>sequence of actions</b> (a plan) that achieves the goal. 
 The predicates capture the logical conditions of the environment, and the actions describe how those conditions change when executed. 
-For example, the planner may compute a plan such as:
+If the current problem is execute to give us the proper plan, using a planner like OPTICS (Optimization Preferences and Time-dependent Costs) gives the following task sequence:
 </p>
 
 <pre>
-go_to robot1 home table1
+(go_to robot1 home table1)
+(pick_up robot1 gripper1 cube1 table1) 
+(go_to robot1 table1 home)
+(go_to robot1 home shelf1) 
+(place robot1 gripper1 cube1 shelf1) 
+(go_to robot1 shelf1 table2) 
+(go_to robot1 table2 table1) 
+(pick_up robot1 gripper1 can1 table1) 
+(go_to robot1 table1 table2) 
+(place robot1 gripper1 can1 table2) 
+(go_to robot1 table2 shelf1)
+(go_to robot1 shelf1 home)
 
 </pre>
 
