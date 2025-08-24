@@ -24,29 +24,33 @@ This repository provides a <strong>forward and inverse kinematics simulation env
   <li>Joint-space (direct joint angles)</li>
   <li>Cartesian-space (desired end-effector pose)</li>
 </ul>
-The project includes tools for <strong>FK, IK, Jacobian computation, and Cartesian velocity control</strong>, with support for tool offsets and joint limits.
+The project includes tools for <strong>FK, IK, Jacobian computation, and Cartesian velocity control</strong>, with support for tool offsets and joint limits. The code is written in a complete and modularized way so that it can be used in more general cases for other types of industrial arms. Only some parameters inside the code need to be modified. For the visualization of the code and better ability to check the results, a UR5e robot is simulated inside webots.
 </p>
 
 <h2 id="-features">✨ Features</h2>
 <ul>
   <li>Forward kinematics (FK) computation from joint angles.</li>
-  <li>Inverse kinematics (IK) control in Cartesian space with pseudoinverse or damped least squares.</li>
+  <li>Inverse kinematics (IK) control in Cartesian space with pseudoinverse.</li>
   <li>Jacobian calculation for differential kinematics.</li>
   <li>Velocity-based Cartesian control with angle-axis error computation.</li>
   <li>Webots integration for simulation of joint motors and sensors.</li>
   <li>Joint limits, max velocity constraints, and convergence thresholds.</li>
+  <li>Planning for a simplified pick and place task using pddl domain and problem.</li>
+  
 </ul>
 
 <h2 id="-repo-structure">📁 Repository Structure</h2>
 <pre>
 UR5e_FK_IK/
-├── config.py            # UR5e parameters, joint limits, control gains
+├── config.py            # UR5e parameters, joint limits, control gains, and basically all the parameters that can be changed to change the type of the robot and the simulation conditions
 ├── geometric_model.py   # FK transformations for revolute/prismatic joints
 ├── kinematic_model.py   # Jacobian computation
 ├── cartesian_control.py # Cartesian velocity controller
-├── robot_base.py        # Webots robot interface (sensors & actuators)
+├── robot_base.py        # Webots robot interface setup (sensors & actuators)
 ├── utils.py             # Helper functions: YPRToRot, KinematicSimulation, parse_expr
-├── main.py              # Main simulation script for FK/IK control
+├── main.py              # Main simulation script to get the user input and implement the FK/IK control
+├── My_Domain.pddl       # A pddl domain file for a pick and place task
+├── My_Problem.pddl      # An example of a pick and place problem task to test the domain
 └── README.md            # This README (HTML-compatible)
 </pre>
 
@@ -54,14 +58,14 @@ UR5e_FK_IK/
 <ol>
   <li>Install Python 3.9+ and set up a virtual environment.</li>
   <li>Install required packages:
-  <pre><code>pip install numpy</code></pre>
-  Webots Python API is included in the Webots installation; ensure <code>WEBOTS_HOME</code> environment variable points to your Webots folder.</li>
+  <pre><code>pip install numpy</code></pre></li>
+  <li> Install Webots and setup the environement: Webots Python API is included in the Webots installation; ensure <code>WEBOTS_HOME</code> environment variable points to your Webots folder. The folder containing the environment is also uploaded on this repository. Make sure to sset the robot controller on extern mode so that it could be controlled using the python code.</li>
   <li>Clone the repository and ensure all modules are in the same folder.</li>
 </ol>
 
 <h2 id="-usage">🧑‍💻 Usage</h2>
 <ol>
-  <li>Start Webots with a UR5e world.</li>
+  <li>Start Webots with a UR5e world. press the play button.</li>
   <li>Run the main script:
   <pre><code>python main.py</code></pre>
   </li>
@@ -71,8 +75,14 @@ UR5e_FK_IK/
       <li>2 → Cartesian pose (x, y, z, roll, pitch, yaw)</li>
     </ul>
   </li>
-  <li>Follow on-screen prompts to enter goal configurations.</li>
-  <li>The control loop will iteratively move the robot until the goal is reached or max iterations are exceeded.</li>
+  <li>Follow on-screen prompts to enter goal configurations.
+    <ul>
+      <li>1 → For the first case where you enter the goal joint angles (forward kinematics), the input should be as followed: q1 q2 q3 q4 q5 q6
+      It should be noted that the values should be space seperated without any brackets and commas. You can also write pi instead of writing the actual value.</li>
+      <li>2 → For the Cartesian pose (inverse kinematics) the input should be as followed: x y z roll pitch yaw</li>
+    </ul>
+   </li>
+  <li>The control loop will iteratively move the robot until the goal is reached or max iterations are exceeded. If the goal is reached the simulation stops and it shows the number of iterations it took to reach the goal. If the robot does not reach the fianl goal before the Maximum iteration reaches, it shows an error saying that the goal could not be reached. The robot reaches the goal considering the minimum and maximum joint values and by keeping a smooth motion in the middle.</li>
 </ol>
 
 <h2 id="-modules">📦 Modules</h2>
@@ -96,12 +106,18 @@ UR5e_FK_IK/
 
 <h2 id="-examples">📌 Examples</h2>
 <pre><code># Example joint input mode
-# 1  -pi/2  0  -pi/2 0 0
+# 0 -pi/2 0 -pi/2 0 0
+# 0 -pi/2 0 0 0 0
+# pi/3 -pi/2 pi/4 0 pi/5 0
+# pi/3 -pi/2 pi/4 0 pi/5 pi/3
+# pi/3 0 0 0 0 0
 python main.py
 # Example Cartesian input mode
-# x y z roll pitch yaw
+# 0.4 0.2 0.8 0 0 pi/3
+# 0.3 0.4 0.3 0 pi/2 pi/3
 python main.py
 </code></pre>
+Keep in mind that after the input is given to the robot, you should wait until it reaches the goal or gives an error regardin the reachability of the robot. You can not change the goal in the middle of the movement in this version of the code. After the goal was reached and the program stops, you do not need to pause the webot simulation. You can run the python code again and insert new inputs and send the robot to new locations from the last position.
 
 <h2 id="-notes">📝 Notes</h2>
 <ul>
