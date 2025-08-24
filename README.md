@@ -119,11 +119,63 @@ python main.py
 python main.py
 </code></pre>
 
+<hr>
 
-<h2 id="-pick and place">🔎 Pick and Place</h2>
+<h2>Task Planning with PDDL</h2>
 <p>
 For the pick and place task, it is assumed that the robot is moving towards the already known locations (pick and place locations) using the inverse kinematics algorithm. the robot in this task should also have a gripper to grab the object and drop it in the final location. At this stage the whole simulation for this part is not done yet and is still ongoing. However, in such tasks, an important part of the algorithm is the motion and task planning of the robot. Thus, a careful planning is required. A planning domain is defined over here for the robot to reach each object, grab the object, bring it to the new location and drop the object at the target location. 
 </p>
+
+<h3>Domain</h3>
+<p>
+The domain defines the abstract capabilities of the robot in a symbolic way. It introduces:
+</p>
+<ul>
+  <li><b>Predicates:</b> These describe the world state, such as:
+    <ul>
+      <li><code>(robot_at ?r ?w)</code> – the robot’s location.</li>
+      <li><code>(gripper_empty ?g)</code> / <code>(gripper_holding ?g ?o)</code> – whether the gripper is free or holding an object.</li>
+      <li><code>(object_at ?o ?w)</code> – the position of objects.</li>
+      <li><code>(location_clear ?w)</code> / <code>(location_accessible ?w)</code> – whether a waypoint can receive objects or be visited.</li>
+      <li><code>(adjacent ?w1 ?w2)</code> – connectivity between waypoints.</li>
+    </ul>
+  </li>
+  <li><b>Actions:</b> These define what the robot can do:
+    <ul>
+      <li><b>go_to:</b> Move the robot between two connected waypoints.</li>
+      <li><b>pick_up:</b> Grasp an object if the gripper is empty and the robot is at the correct waypoint.</li>
+      <li><b>place:</b> Place a held object at a waypoint if it is clear.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>Problem</h3>
+<p>
+The problem file specifies a concrete task instance:
+</p>
+<ul>
+  <li><b>Objects:</b> One robot, one gripper, two manipulable objects (<code>can1</code>, <code>cube1</code>), and several waypoints (<code>home</code>, <code>table1</code>, <code>table2</code>, <code>shelf1</code>).</li>
+  <li><b>Initial State:</b> The robot starts at <code>home</code> with an empty gripper, and both objects are located on <code>table1</code>. Accessibility and adjacency relations between waypoints are defined.</li>
+  <li><b>Goal State:</b> The can must end up on <code>table2</code>, the cube must be placed on <code>shelf1</code>, and the robot should return to <code>home</code> with an empty gripper.</li>
+</ul>
+
+<h3>How It Works</h3>
+<p>
+The domain and problem together allow a planner to generate a <b>sequence of actions</b> (a plan) that achieves the goal. 
+The predicates capture the logical conditions of the environment, and the actions describe how those conditions change when executed. 
+For example, the planner may compute a plan such as:
+</p>
+
+<pre>
+go_to robot1 home table1
+
+</pre>
+
+<p>
+This high-level plan can then be mapped to motion commands via the inverse kinematics and control modules in the repository, 
+bridging <b>symbolic task planning</b> with <b>robot motion execution</b>.
+</p>
+
 
 
 <h2 id="-notes">📝 Notes</h2>
